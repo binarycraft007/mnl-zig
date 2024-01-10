@@ -1,0 +1,24 @@
+## MNL module for zig
+
+### What is MNL?
+mnl is a minimalistic user-space library oriented to Netlink developers.
+There are a lot of common tasks in parsing, validating, constructing of
+both the Netlink header and TLVs that are repetitive and easy to get wrong.
+This library aims to provide simple helpers that allows you to re-use code
+and to avoid re-inventing the wheel. The main features of this library are:
+
+- Small: since zig uses lazy analysis, you only pay for what you use.
+- Simple: this library avoids complexity and elaborated abstractions that
+tend to hide Netlink details.
+- Easy to use: the library simplifies the work for Netlink-wise developers.
+It provides functions to make socket handling, message building, validating,
+parsing and sequence tracking, easier.
+- Easy to re-use: you can use the library to build your own abstraction layer
+on top of this library.
+- Decoupling: the interdependency of the main bricks that compose the library
+is reduced, i.e. the library provides many helpers, but the programmer is not
+forced to use them.
+
+### Example files
+You can find several example files under examples/ that you can compile by
+invoking `zig build examples`.
