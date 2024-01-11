@@ -1,3 +1,5 @@
+pub const auto_pid = 0;
+pub const buffer_size = if (std.mem.page_size < 8192) std.mem.page_size else 8192;
 pub const BusId = enum(u5) {
     route = 0, // Routing/device hook
     unused, // Unused number
@@ -41,7 +43,6 @@ pub const Address = extern union {
             os.AF.NETLINK => {
                 return @as(os.socklen_t, @intCast(@sizeOf(os.sockaddr.nl)));
             },
-
             else => unreachable,
         }
     }
@@ -60,7 +61,7 @@ pub const NlAddress = extern struct {
 };
 
 sockfd: os.socket_t,
-addr: Address = undefined,
+addr: Address = Address.initNl(0, 0),
 
 /// open a netlink socket
 pub fn open(bus: BusId) os.SocketError!Socket {
@@ -113,32 +114,35 @@ pub fn getsockopt(self: *Socket, optname: OptionName, opt: []const u8) GetSockOp
 
 pub const BindError = os.BindError || os.GetSockNameError;
 pub fn bind(self: *Socket, groups: u32, pid: os.pid_t) BindError!void {
-    self.addr = Address.initNl(pid, groups);
-    try os.bind(self.sockfd, &self.addr, self.addr.getOsSockLen());
-    try os.getsockname(self.sockfd, self.addr, self.addr.getOsSockLen());
+    var sock_len: u32 = self.addr.getOsSockLen();
+    self.addr = Address.initNl(@intCast(pid), groups);
+    try os.bind(self.sockfd, &self.addr.any, sock_len);
+    try os.getsockname(self.sockfd, &self.addr.any, &sock_len);
     std.debug.assert(self.addr.any.family == os.AF.NETLINK);
 }
 
 pub const FdOpenError = os.GetSockNameError;
 pub fn fdopen(sockfd: os.socket_t) FdOpenError!Socket {
-    var addr: Address = undefined;
-    try os.getsockname(sockfd, addr, addr.getOsSockLen());
+    var addr = Address.initNl(0, 0);
+    var sock_len: u32 = addr.getOsSockLen();
+    try os.getsockname(sockfd, &addr.any, &sock_len);
     std.debug.assert(addr.any.family == os.AF.NETLINK);
     return .{ .sockfd = sockfd, .addr = addr };
 }
 
 pub const SendToError = os.SendToError;
-pub fn sendto(self: *Socket, buf: []const u8) SendToError!void {
-    try os.sendto(self.sockfd, buf, 0, self.addr, self.addr.getOsSockLen());
+pub fn sendto(self: *Socket, buf: []const u8) SendToError!usize {
+    return try os.sendto(self.sockfd, buf, 0, &self.addr.any, self.addr.getOsSockLen());
 }
 
 pub const RecvFromError = os.RecvFromError;
-pub fn recvfrom(self: *Socket, buf: []const u8) RecvFromError!void {
-    var iov: os.iovec = .{ .iov_base = buf.ptr, .iov_len = buf.len };
+pub fn recvfrom(self: *Socket, buf: []u8) RecvFromError!usize {
+    var iov: [1]os.iovec = .{.{ .iov_base = buf.ptr, .iov_len = buf.len }};
+    const iov_ptr: [*]os.iovec = &iov;
     var msg: os.msghdr = .{
-        .name = &self.addr,
+        .name = &self.addr.any,
         .namelen = self.addr.getOsSockLen(),
-        .iov = &iov,
+        .iov = iov_ptr,
         .iovlen = 1,
         .control = null,
         .controllen = 0,
